@@ -26,6 +26,7 @@ def init_db():
             away_team TEXT NOT NULL,
             favorite_team TEXT NOT NULL,
             pregame_odds REAL NOT NULL,
+            start_time TEXT,
             last_notified_odds REAL,
             last_notification_time TEXT,
             status TEXT DEFAULT 'active',
@@ -66,7 +67,8 @@ def add_monitored_game(
     home_team: str,
     away_team: str,
     favorite_team: str,
-    pregame_odds: float
+    pregame_odds: float,
+    start_time: str = None
 ) -> bool:
     """Add a game to monitor. Returns True if added, False if exists."""
     conn = get_connection()
@@ -75,9 +77,9 @@ def add_monitored_game(
     try:
         cursor.execute("""
             INSERT INTO monitored_games
-            (ticker, game_date, home_team, away_team, favorite_team, pregame_odds)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (ticker, game_date, home_team, away_team, favorite_team, pregame_odds))
+            (ticker, game_date, home_team, away_team, favorite_team, pregame_odds, start_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (ticker, game_date, home_team, away_team, favorite_team, pregame_odds, start_time))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -208,6 +210,24 @@ def cleanup_old_games(days_old: int = 7):
 
     conn.commit()
     conn.close()
+
+
+def get_earliest_start_time() -> Optional[str]:
+    """Get the earliest start time among active games."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT start_time FROM monitored_games
+        WHERE status = 'active' AND start_time IS NOT NULL
+        ORDER BY start_time ASC
+        LIMIT 1
+    """)
+
+    row = cursor.fetchone()
+    conn.close()
+
+    return row["start_time"] if row else None
 
 
 def reset_db():

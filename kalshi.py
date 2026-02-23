@@ -5,9 +5,9 @@ from typing import Optional
 from datetime import datetime
 import config
 
-# Rate limiting - Kalshi allows ~10 requests/second
+# Rate limiting - Kalshi allows 20 requests/second
 _last_request_time = 0
-_min_request_interval = 0.15  # 150ms between requests
+_min_request_interval = 0.05  # 50ms between requests
 
 
 def _rate_limit():

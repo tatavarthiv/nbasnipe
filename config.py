@@ -10,7 +10,7 @@ PREGAME_THRESHOLD = 0.75  # Monitor games where favorite is >= this (heavy favor
 ENTRY_THRESHOLD = 0.60    # Notify when odds drop to <= this (entry point, -150 or better)
 
 # Polling
-POLL_INTERVAL_SECONDS = 5
+POLL_INTERVAL_SECONDS = 1
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")

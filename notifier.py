@@ -120,6 +120,66 @@ def send_startup_message():
     asyncio.run(send_telegram_message(message))
 
 
+def send_slate_notification(date: str, tracked: list, untracked: list):
+    """Send slate notification with all games for the day."""
+    from datetime import datetime
+
+    # Format date nicely
+    try:
+        dt = datetime.strptime(date, "%Y-%m-%d")
+        date_str = dt.strftime("%b %d")
+    except:
+        date_str = date
+
+    lines = [f"Today's Slate ({date_str})"]
+    lines.append("")
+
+    if tracked:
+        lines.append("Tracking:")
+        for g in tracked:
+            fav = g["favorite"]
+            fav_name = TEAM_NAMES.get(fav, fav)
+            und = g["underdog"]
+            und_name = TEAM_NAMES.get(und, und)
+            odds = g["favorite_american"]
+            start = format_start_time_short(g.get("start_time", ""))
+            time_str = f" @ {start}" if start and start != "TBD" else ""
+            lines.append(f"  {fav_name} {odds} vs {und_name}{time_str}")
+    else:
+        lines.append("Tracking: None (no heavy favorites)")
+
+    lines.append("")
+
+    if untracked:
+        lines.append("Not tracking:")
+        for g in untracked:
+            fav = g["favorite"]
+            fav_name = TEAM_NAMES.get(fav, fav)
+            und = g["underdog"]
+            und_name = TEAM_NAMES.get(und, und)
+            odds = g["favorite_american"]
+            start = format_start_time_short(g.get("start_time", ""))
+            time_str = f" @ {start}" if start and start != "TBD" else ""
+            lines.append(f"  {fav_name} {odds} vs {und_name}{time_str}")
+
+    message = "\n".join(lines)
+    asyncio.run(send_telegram_message(message))
+
+
+def format_start_time_short(iso_time: str) -> str:
+    """Format ISO time to short format like '7:00 PM'."""
+    if not iso_time:
+        return "TBD"
+    try:
+        from datetime import datetime, timedelta
+        dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
+        # Convert to ET (UTC-5)
+        et = dt - timedelta(hours=5)
+        return et.strftime("%-I:%M %p")
+    except:
+        return "TBD"
+
+
 if __name__ == "__main__":
     # Test notification
     test_msg = format_notification(

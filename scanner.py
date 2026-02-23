@@ -1,27 +1,35 @@
 """Daily game scanner - identifies heavy favorites to monitor."""
 from datetime import datetime
 import kalshi
+import scores
 import state
 import config
+import notifier
 
 
-def scan_games_for_date(date: str) -> int:
-    """Scan NBA games for a specific date and add heavy favorites to monitoring.
-
-    Args:
-        date: Date string (YYYY-MM-DD)
+def scan_games_for_date(date: str) -> tuple[list, list]:
+    """Scan NBA games for a specific date.
 
     Returns:
-        Number of games added to monitoring
+        (tracked_games, untracked_games) - lists of game info dicts
     """
     print(f"Scanning games for {date}...")
 
-    # Get all NBA events
+    # Get all NBA events from Kalshi
     events = kalshi.get_nba_events()
     todays_events = [e for e in events if e["game_date"] == date]
     print(f"Found {len(todays_events)} NBA games on {date}")
 
-    games_added = 0
+    # Get start times from NBA API
+    nba_games = scores.get_todays_games()
+    start_times = {}
+    for g in nba_games:
+        key = f"{g['away_team']}@{g['home_team']}"
+        start_times[key] = g.get("start_time", "")
+
+    tracked = []
+    untracked = []
+
     for event in todays_events:
         odds = kalshi.get_game_odds(event["event_ticker"])
         if not odds:
@@ -35,42 +43,59 @@ def scan_games_for_date(date: str) -> int:
             print(f"  {event['event_ticker']}: Game already finished, skipping")
             continue
 
+        # Get start time
+        key = f"{event['away_team']}@{event['home_team']}"
+        start_time = start_times.get(key, "")
+
+        game_info = {
+            "ticker": event["event_ticker"],
+            "home_team": event["home_team"],
+            "away_team": event["away_team"],
+            "favorite": odds["favorite"],
+            "underdog": odds["underdog"],
+            "favorite_prob": odds["favorite_prob"],
+            "favorite_american": american,
+            "start_time": start_time,
+            "game_date": date,
+        }
+
         # Check if it's a heavy favorite
-        if odds["favorite_prob"] < config.PREGAME_THRESHOLD:
-            print(f"  {event['event_ticker']}: {odds['favorite']} {american} - below threshold, skipping")
-            continue
+        if odds["favorite_prob"] >= config.PREGAME_THRESHOLD:
+            # Add to monitoring
+            added = state.add_monitored_game(
+                ticker=event["event_ticker"],
+                game_date=event["game_date"],
+                home_team=event["home_team"],
+                away_team=event["away_team"],
+                favorite_team=odds["favorite"],
+                pregame_odds=odds["favorite_prob"],
+                start_time=start_time
+            )
 
-        # Add to monitoring
-        added = state.add_monitored_game(
-            ticker=event["event_ticker"],
-            game_date=event["game_date"],
-            home_team=event["home_team"],
-            away_team=event["away_team"],
-            favorite_team=odds["favorite"],
-            pregame_odds=odds["favorite_prob"]
-        )
+            if added:
+                print(f"  {event['event_ticker']}: {odds['favorite']} {american} - ADDED to monitoring")
+            else:
+                print(f"  {event['event_ticker']}: Already monitoring")
 
-        if added:
-            print(f"  {event['event_ticker']}: {odds['favorite']} {american} - ADDED to monitoring")
-            games_added += 1
+            tracked.append(game_info)
         else:
-            print(f"  {event['event_ticker']}: Already monitoring")
+            print(f"  {event['event_ticker']}: {odds['favorite']} {american} - below threshold")
+            untracked.append(game_info)
 
-    print(f"\nAdded {games_added} new games to monitor")
-    return games_added
+    print(f"\nTracking {len(tracked)} games, not tracking {len(untracked)}")
+    return tracked, untracked
 
 
-def scan_todays_games() -> int:
-    """Scan today's NBA games."""
+def scan_and_notify(date: str):
+    """Scan games and send slate notification."""
+    tracked, untracked = scan_games_for_date(date)
+    notifier.send_slate_notification(date, tracked, untracked)
+
+
+def scan_todays_games():
+    """Scan today's NBA games and send notification."""
     today = datetime.now().strftime("%Y-%m-%d")
-    return scan_games_for_date(today)
-
-
-def scan_tomorrows_games() -> int:
-    """Scan tomorrow's NBA games."""
-    from datetime import timedelta
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    return scan_games_for_date(tomorrow)
+    scan_and_notify(today)
 
 
 def get_monitored_summary() -> str:
@@ -83,18 +108,33 @@ def get_monitored_summary() -> str:
     lines = [f"Monitoring {len(games)} games:"]
     for game in games:
         american = kalshi.probability_to_american(game["pregame_odds"])
-        lines.append(f"  {game['favorite_team']} {american} vs {game['away_team'] if game['favorite_team'] == game['home_team'] else game['home_team']} ({game['game_date']})")
+        start = format_start_time(game.get("start_time", ""))
+        lines.append(f"  {game['favorite_team']} {american} vs {game['away_team'] if game['favorite_team'] == game['home_team'] else game['home_team']} @ {start}")
 
     return "\n".join(lines)
 
 
+def format_start_time(iso_time: str) -> str:
+    """Format ISO time to readable format like '7:00 PM ET'."""
+    if not iso_time:
+        return "TBD"
+    try:
+        # Parse ISO format
+        dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
+        # Convert to ET (UTC-5)
+        from datetime import timedelta
+        et = dt - timedelta(hours=5)
+        return et.strftime("%-I:%M %p ET")
+    except:
+        return iso_time
+
+
 if __name__ == "__main__":
-    # Scan for tomorrow since today's games may be done
     from datetime import timedelta
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
     print(f"=== Scanning for {tomorrow} ===\n")
-    scan_games_for_date(tomorrow)
+    tracked, untracked = scan_games_for_date(tomorrow)
 
     print("\n=== Current Monitoring Status ===")
     print(get_monitored_summary())
