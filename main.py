@@ -14,9 +14,17 @@ import kalshi
 _refreshed_games = set()
 
 
-def run_daily_scan():
-    """Run the daily scanner for today and send slate notification."""
-    print(f"\n[{datetime.now()}] Running daily scanner...")
+def run_slate_scan():
+    """Run scanner and send updated slate. Skips if games are already live."""
+    try:
+        nba_games = scores.get_todays_games()
+        if any(g["status"] == "live" for g in nba_games):
+            print(f"[{datetime.now()}] Games already live, skipping slate scan.")
+            return
+    except Exception:
+        pass  # If we can't check, run the scan anyway
+
+    print(f"\n[{datetime.now()}] Running slate scan...")
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         scanner.scan_and_notify(today)
@@ -183,13 +191,15 @@ def main():
     # Send startup notification
     notifier.send_startup_message()
 
-    # Schedule daily scan at 7 AM PST (10 AM ET / 3 PM UTC)
-    schedule.every().day.at("15:00").do(run_daily_scan)
+    # Schedule slate scans every 2 hours starting 9 AM PST until games go live
+    # Times in UTC: 17:00, 19:00, 21:00, 23:00 = 9 AM, 11 AM, 1 PM, 3 PM PST
+    for hour in ["17:00", "19:00", "21:00", "23:00"]:
+        schedule.every().day.at(hour).do(run_slate_scan)
 
-    # Schedule daily cleanup at 3 AM
+    # Schedule daily cleanup at 3 AM UTC
     schedule.every().day.at("03:00").do(lambda: state.cleanup_old_games(days_old=7))
 
-    print("Waiting for daily scan (7 AM PST) or next game...")
+    print("Waiting for first slate scan (9 AM PST) or next game...")
 
     try:
         while True:

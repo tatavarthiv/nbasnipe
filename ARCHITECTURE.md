@@ -89,17 +89,18 @@ Log of all sent notifications.
 ```
 main()
   → state.init_db()                    # Create tables if needed
-  → notifier.send_startup_message()    # "Bot is active" Telegram msg
-  → schedule daily scan at 15:00 UTC   # (10 AM ET / 7 AM PT)
+  → notifier.send_startup_message()    # "Bot redeployed" Telegram msg
+  → schedule slate scans at 17:00, 19:00, 21:00, 23:00 UTC
+  →   (9 AM, 11 AM, 1 PM, 3 PM PST)
   → schedule cleanup at 03:00 UTC      # Delete games > 7 days old
   → enter main loop (Phase 3)
 ```
 
-No scan runs on startup. The first scan happens at the scheduled 7 AM PST time.
+No scan runs on startup. Scans run every 2 hours starting at 9 AM PST. Each scan picks up any new Kalshi listings (games may be added throughout the day) and sends an updated slate with current odds and start times. Scans automatically skip once games go live.
 
-### Phase 2: Daily Scan (`scanner.scan_games_for_date()`)
+### Phase 2: Slate Scan (`main.py:run_slate_scan()` → `scanner.scan_games_for_date()`)
 
-Runs at 7 AM PST. This is an **overview** — it identifies which games to track and sends a slate notification. The odds captured here are "morning odds" and will be **replaced** with fresh odds right before each game starts (see Phase 3.5).
+Runs every 2 hours (9 AM, 11 AM, 1 PM, 3 PM PST). Each scan re-fetches all Kalshi events and current odds, adds any newly listed games to the DB, and sends a full slate notification showing all games with their latest odds and start times. `add_monitored_game` skips duplicates so re-scanning is safe. Scanning stops automatically once any game goes live.
 
 ```
 scan_games_for_date(date)
@@ -212,7 +213,12 @@ process_game(game)
 ### FIXED: Daily scan ran on startup
 **Problem**: `run_daily_scan()` was called immediately on bot startup, which was unnecessary since the scheduled scan handles it.
 
-**Fix**: Removed the startup scan. The bot now just starts up and waits for the scheduled 7 AM PST scan.
+**Fix**: Removed the startup scan. The bot now just starts up and waits for the scheduled scans.
+
+### FIXED: Missing games from Kalshi
+**Problem**: Kalshi doesn't always list all games early in the morning. A single 7 AM scan would miss games added later, meaning they'd never be tracked.
+
+**Fix**: Slate scans now run every 2 hours (9 AM, 11 AM, 1 PM, 3 PM PST). Each scan picks up newly listed Kalshi events and sends an updated slate with current odds and start times. Scans stop once games go live.
 
 ### FIXED: Hardcoded timezone
 **Problem**: `timedelta(hours=5)` assumed EST year-round, off by 1 hour during EDT (March-November).
@@ -294,7 +300,7 @@ main() while loop          → checks every 60s/10s/5min for live games
 
 Odds are pulled from Kalshi at three moments:
 
-1. **7 AM scan** (`scanner.py`): Once per game via `get_game_odds()` to determine if it's a heavy favorite. Sets initial `pregame_odds` in the DB. These are "morning preview" odds.
+1. **Every 2 hours** (9 AM - 3 PM PST, `scanner.py`): Once per game via `get_game_odds()` to determine if it's a heavy favorite. Sets initial `pregame_odds` in the DB. Each scan picks up newly listed Kalshi events and sends an updated slate with current odds + start times.
 2. **5 min before tipoff** (`main.py:refresh_pregame_odds()`): Once per game via `get_team_odds()`. Overwrites `pregame_odds` in the DB with the latest line. This is the **real baseline** used for entry threshold comparison.
 3. **Every poll cycle** (`poller.py`): Once per monitored game per second via `get_team_odds()` to check the stored favorite's current probability against the entry threshold.
 

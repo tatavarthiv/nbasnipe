@@ -155,14 +155,11 @@ def send_slate_notification(date: str, tracked: list, untracked: list):
     if tracked:
         lines.append("Tracking:")
         for g in tracked:
-            fav = g["favorite"]
-            fav_name = TEAM_NAMES.get(fav, fav)
-            und = g["underdog"]
-            und_name = TEAM_NAMES.get(und, und)
-            odds = g["favorite_american"]
+            fav_name = TEAM_NAMES.get(g["favorite"], g["favorite"])
+            und_name = TEAM_NAMES.get(g["underdog"], g["underdog"])
+            odds = format_american(g["favorite_american"])
             start = format_start_time_short(g.get("start_time", ""))
-            time_str = f" @ {start}" if start and start != "TBD" else ""
-            lines.append(f"  {fav_name} {odds} vs {und_name}{time_str}")
+            lines.append(f"  {fav_name} {odds} vs {und_name} @ {start}")
     else:
         lines.append("Tracking: None (no heavy favorites)")
 
@@ -171,14 +168,11 @@ def send_slate_notification(date: str, tracked: list, untracked: list):
     if untracked:
         lines.append("Not tracking:")
         for g in untracked:
-            fav = g["favorite"]
-            fav_name = TEAM_NAMES.get(fav, fav)
-            und = g["underdog"]
-            und_name = TEAM_NAMES.get(und, und)
-            odds = g["favorite_american"]
+            fav_name = TEAM_NAMES.get(g["favorite"], g["favorite"])
+            und_name = TEAM_NAMES.get(g["underdog"], g["underdog"])
+            odds = format_american(g["favorite_american"])
             start = format_start_time_short(g.get("start_time", ""))
-            time_str = f" @ {start}" if start and start != "TBD" else ""
-            lines.append(f"  {fav_name} {odds} vs {und_name}{time_str}")
+            lines.append(f"  {fav_name} {odds} vs {und_name} @ {start}")
 
     message = "\n".join(lines)
     asyncio.run(send_telegram_message(message))
