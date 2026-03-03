@@ -5,9 +5,9 @@ from typing import Optional
 from datetime import datetime
 import config
 
-# Rate limiting - Kalshi allows 20 requests/second
+# Rate limiting - generous to avoid 429s, speed doesn't matter for scans
 _last_request_time = 0
-_min_request_interval = 0.05  # 50ms between requests
+_min_request_interval = 1.0  # 1 second between requests
 
 
 def _rate_limit():
@@ -61,36 +61,45 @@ def get_nba_events() -> list[dict]:
         "game_date": "2026-02-24"
     }
     """
-    _rate_limit()
     url = f"{config.KALSHI_API_BASE}/events"
-    params = {
-        "series_ticker": config.KALSHI_NBA_SERIES,
-        "limit": 50,
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException as e:
-        print(f"Error fetching Kalshi events: {e}")
-        return []
-
+    cursor = None
     events = []
-    for event in data.get("events", []):
-        ticker = event.get("event_ticker", "")
-        parsed = parse_event_ticker(ticker)
-        if not parsed:
-            continue
 
-        events.append({
-            "event_ticker": ticker,
-            "title": event.get("title", ""),
-            "sub_title": event.get("sub_title", ""),
-            "away_team": parsed["away_team"],
-            "home_team": parsed["home_team"],
-            "game_date": parsed["game_date"],
-        })
+    while True:
+        _rate_limit()
+        params = {
+            "series_ticker": config.KALSHI_NBA_SERIES,
+            "limit": 200,
+        }
+        if cursor:
+            params["cursor"] = cursor
+
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException as e:
+            print(f"Error fetching Kalshi events: {e}")
+            break
+
+        for event in data.get("events", []):
+            ticker = event.get("event_ticker", "")
+            parsed = parse_event_ticker(ticker)
+            if not parsed:
+                continue
+
+            events.append({
+                "event_ticker": ticker,
+                "title": event.get("title", ""),
+                "sub_title": event.get("sub_title", ""),
+                "away_team": parsed["away_team"],
+                "home_team": parsed["home_team"],
+                "game_date": parsed["game_date"],
+            })
+
+        cursor = data.get("cursor")
+        if not cursor:
+            break
 
     return events
 
