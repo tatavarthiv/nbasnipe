@@ -66,6 +66,7 @@ Stores games we're actively watching.
 | pregame_odds | REAL | Favorite's probability at scan time (0-1) |
 | start_time | TEXT | ISO 8601 from NBA API |
 | last_notified_odds | REAL | Probability when last notification was sent |
+| last_notified_quarter | INTEGER | Quarter/period when last notification was sent (resets baseline each quarter) |
 | last_notification_time | TEXT | ISO timestamp |
 | status | TEXT | `active` or `complete` |
 
@@ -177,9 +178,9 @@ process_game(game)
   → IF game is final: mark complete
   → IF game is live:
       → Determine favorite's score vs underdog's score
-      → state.should_notify(ticker, current_prob):
+      → state.should_notify(ticker, current_prob, period):
           → current_prob <= 0.60 (ENTRY_THRESHOLD)?
-          → Never notified before? OR odds improved (lower probability)?
+          → Never notified before? OR new quarter? OR odds improved?
       → IF yes:
           → notifier.send_notification()    # Telegram alert
           → state.update_last_notification()
@@ -229,6 +230,11 @@ process_game(game)
 **Problem**: Positive American odds displayed without `+` prefix (e.g., `163` instead of `+163`).
 
 **Fix**: Added `format_american()` helper in `notifier.py`.
+
+### FIXED: No re-notification after quarter changes
+**Problem**: `should_notify` used a single `last_notified_odds` high-water mark for the entire game. If odds hit +100 in Q1, a -120 line in Q4 (still a great entry on a heavy favorite) would be suppressed because -120 is "worse" than +100.
+
+**Fix**: Added per-quarter reset. `should_notify` now accepts a `period` parameter and compares against `last_notified_quarter` in the DB. When a new quarter (or OT period) starts, the baseline resets — any odds at/below the -150 entry threshold trigger a fresh notification. Within the same quarter, notifications still require improvement. Max ~1 extra notification per quarter.
 
 ---
 

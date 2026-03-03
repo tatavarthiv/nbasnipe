@@ -28,6 +28,7 @@ def init_db():
             pregame_odds REAL NOT NULL,
             start_time TEXT,
             last_notified_odds REAL,
+            last_notified_quarter INTEGER,
             last_notification_time TEXT,
             status TEXT DEFAULT 'active',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -139,17 +140,18 @@ def update_pregame_odds(ticker: str, odds: float):
     conn.close()
 
 
-def update_last_notification(ticker: str, odds: float):
-    """Update the last notified odds for a game."""
+def update_last_notification(ticker: str, odds: float, period: int = 0):
+    """Update the last notified odds and quarter for a game."""
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE monitored_games
         SET last_notified_odds = ?,
+            last_notified_quarter = ?,
             last_notification_time = ?
         WHERE ticker = ?
-    """, (odds, datetime.now().isoformat(), ticker))
+    """, (odds, period, datetime.now().isoformat(), ticker))
 
     conn.commit()
     conn.close()
@@ -190,12 +192,14 @@ def log_notification(
     conn.close()
 
 
-def should_notify(ticker: str, current_odds: float) -> bool:
+def should_notify(ticker: str, current_odds: float, period: int = 0) -> bool:
     """Check if we should send a notification for this game.
 
     Returns True if:
-    - Never notified before and odds <= ENTRY_THRESHOLD
-    - Previously notified and odds have IMPROVED (lower = better for favorite)
+    - Odds are at or below ENTRY_THRESHOLD, AND:
+    - Never notified before, OR
+    - New quarter started (resets baseline each quarter/OT), OR
+    - Same quarter but odds have improved (lower probability = better value)
     """
     game = get_game_by_ticker(ticker)
     if not game:
@@ -205,11 +209,15 @@ def should_notify(ticker: str, current_odds: float) -> bool:
     if current_odds > config.ENTRY_THRESHOLD:
         return False
 
-    # First notification
+    # First notification ever
     if game["last_notified_odds"] is None:
         return True
 
-    # Re-notify only if odds improved (lower probability = better value)
+    # New quarter/OT period = fresh notification opportunity
+    if game["last_notified_quarter"] is None or period != game["last_notified_quarter"]:
+        return True
+
+    # Same quarter: re-notify only if odds improved (lower probability = better value)
     return current_odds < game["last_notified_odds"]
 
 

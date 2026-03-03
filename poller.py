@@ -63,7 +63,7 @@ def process_game(game: dict):
     print(f"  {ticker}: {favorite_team} {current_american} ({favorite_score}-{underdog_score} Q{period})")
 
     # Check if we should notify
-    if state.should_notify(ticker, current_prob):
+    if state.should_notify(ticker, current_prob, period):
         print(f"    -> SENDING NOTIFICATION!")
 
         pregame_prob = game["pregame_odds"]
@@ -80,7 +80,7 @@ def process_game(game: dict):
             pregame_odds=pregame_american
         )
 
-        state.update_last_notification(ticker, current_prob)
+        state.update_last_notification(ticker, current_prob, period)
         state.log_notification(
             ticker=ticker,
             odds=current_prob,
@@ -96,7 +96,7 @@ def check_and_notify_pregame(game: dict, current_prob: float, current_american: 
     ticker = game["ticker"]
 
     # Only notify if odds have dropped below entry threshold
-    if state.should_notify(ticker, current_prob):
+    if state.should_notify(ticker, current_prob, period=0):
         print(f"    -> Pregame odds dropped! SENDING NOTIFICATION!")
 
         pregame_prob = game["pregame_odds"]
@@ -113,7 +113,7 @@ def check_and_notify_pregame(game: dict, current_prob: float, current_american: 
             pregame_odds=pregame_american
         )
 
-        state.update_last_notification(ticker, current_prob)
+        state.update_last_notification(ticker, current_prob, period=0)
 
 
 if __name__ == "__main__":
