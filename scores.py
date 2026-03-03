@@ -67,7 +67,7 @@ def get_todays_games() -> list[dict]:
             "away_score": game.get("awayTeam", {}).get("score", 0),
             "status": status,
             "period": game.get("period", 0),
-            "clock": game.get("gameClock", ""),
+            "clock": format_clock(game.get("gameClock", "")),
             "start_time": game.get("gameTimeUTC", ""),
         })
 

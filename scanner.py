@@ -119,11 +119,9 @@ def format_start_time(iso_time: str) -> str:
     if not iso_time:
         return "TBD"
     try:
-        # Parse ISO format
+        from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
-        # Convert to ET (UTC-5)
-        from datetime import timedelta
-        et = dt - timedelta(hours=5)
+        et = dt.astimezone(ZoneInfo("America/New_York"))
         return et.strftime("%-I:%M %p ET")
     except:
         return iso_time

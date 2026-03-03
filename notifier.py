@@ -6,6 +6,13 @@ import config
 import scores
 
 
+def format_american(odds: int) -> str:
+    """Format American odds with +/- prefix."""
+    if odds > 0:
+        return f"+{odds}"
+    return str(odds)
+
+
 # Team full names for nicer notifications
 TEAM_NAMES = {
     "ATL": "Hawks", "BOS": "Celtics", "BKN": "Nets", "CHA": "Hornets",
@@ -60,8 +67,8 @@ def format_notification(
     message = f"""{status_line}
 {time_line}
 
-Current odds: {current_odds}
-Pregame odds: {pregame_odds}"""
+Current odds: {format_american(current_odds)}
+Pregame odds: {format_american(pregame_odds)}"""
 
     return message
 
@@ -114,9 +121,20 @@ def send_notification(
     return asyncio.run(send_telegram_message(message))
 
 
+def send_game_starting(favorite_team: str, underdog_team: str, odds: int):
+    """Send notification that a game is about to start and we're tracking it."""
+    fav_name = TEAM_NAMES.get(favorite_team, favorite_team)
+    und_name = TEAM_NAMES.get(underdog_team, underdog_team)
+
+    message = f"""Now tracking: {fav_name} {format_american(odds)} vs {und_name}
+Game starting soon"""
+
+    asyncio.run(send_telegram_message(message))
+
+
 def send_startup_message():
     """Send a message when the bot starts."""
-    message = "NBA Odds Sniper is now active and monitoring games."
+    message = "Bot redeployed and now monitoring games."
     asyncio.run(send_telegram_message(message))
 
 
@@ -171,10 +189,10 @@ def format_start_time_short(iso_time: str) -> str:
     if not iso_time:
         return "TBD"
     try:
-        from datetime import datetime, timedelta
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
-        # Convert to ET (UTC-5)
-        et = dt - timedelta(hours=5)
+        et = dt.astimezone(ZoneInfo("America/New_York"))
         return et.strftime("%-I:%M %p")
     except:
         return "TBD"

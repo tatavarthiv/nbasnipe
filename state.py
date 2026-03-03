@@ -124,6 +124,21 @@ def get_game_by_ticker(ticker: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def update_pregame_odds(ticker: str, odds: float):
+    """Update the pregame odds for a game (used for pre-game refresh)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE monitored_games
+        SET pregame_odds = ?
+        WHERE ticker = ?
+    """, (odds, ticker))
+
+    conn.commit()
+    conn.close()
+
+
 def update_last_notification(ticker: str, odds: float):
     """Update the last notified odds for a game."""
     conn = get_connection()

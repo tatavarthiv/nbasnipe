@@ -7,42 +7,21 @@ import notifier
 import config
 
 
-def poll_active_games():
-    """Check all active monitored games for betting opportunities.
-
-    For each game:
-    1. Get current odds from Kalshi
-    2. Get live score from nba_api
-    3. Check if odds hit threshold
-    4. Send notification if first time or improvement
-    """
-    active_games = state.get_active_games()
-
-    if not active_games:
-        return
-
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Polling {len(active_games)} active games...")
-
-    for game in active_games:
-        try:
-            process_game(game)
-        except Exception as e:
-            print(f"  Error processing {game['ticker']}: {e}")
-
-
 def process_game(game: dict):
     """Process a single monitored game."""
     ticker = game["ticker"]
     favorite_team = game["favorite_team"]
 
-    # Get current odds from Kalshi
-    odds = kalshi.get_game_odds(ticker)
+    # Get current odds for the stored favorite team specifically
+    # (not whichever team currently leads - that flips when the favorite
+    # goes to positive odds and we'd lose track of the team we're monitoring)
+    odds = kalshi.get_team_odds(ticker, favorite_team)
     if not odds:
         print(f"  {ticker}: No odds available")
         return
 
-    current_prob = odds["favorite_prob"]
-    current_american = odds["favorite_american"]
+    current_prob = odds["probability"]
+    current_american = odds["american"]
 
     # Get live score
     live_game = scores.find_game_by_teams(
@@ -137,10 +116,8 @@ def check_and_notify_pregame(game: dict, current_prob: float, current_american: 
         state.update_last_notification(ticker, current_prob)
 
 
-def has_active_games() -> bool:
-    """Check if there are any active games to monitor."""
-    return len(state.get_active_games()) > 0
-
-
 if __name__ == "__main__":
-    poll_active_games()
+    # Test processing with active games
+    active = state.get_active_games()
+    for game in active:
+        process_game(game)

@@ -1,13 +1,17 @@
 """Main entry point - runs the scanner and poller."""
 import time
 import schedule
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import scanner
 import poller
 import notifier
 import state
 import scores
 import config
+import kalshi
+
+# Games that have had their pregame odds refreshed (reset on restart)
+_refreshed_games = set()
 
 
 def run_daily_scan():
@@ -36,6 +40,67 @@ def get_seconds_until_first_game() -> int:
     except Exception as e:
         print(f"Error parsing start time: {e}")
         return 0
+
+
+def check_pregame_refreshes():
+    """Refresh pregame odds for games starting within 5 minutes.
+
+    Re-fetches Kalshi odds right before tipoff so the stored pregame_odds
+    reflect the latest lines (injury news, etc.) rather than the 7 AM scan.
+    Sends a "game starting" notification for each refreshed game.
+    """
+    active_games = state.get_active_games()
+    now = datetime.now(timezone.utc)
+
+    for game in active_games:
+        ticker = game["ticker"]
+        if ticker in _refreshed_games:
+            continue
+
+        start_time = game.get("start_time")
+        if not start_time:
+            continue
+
+        try:
+            game_time = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            minutes_until = (game_time - now).total_seconds() / 60
+
+            if minutes_until <= 5:
+                refresh_pregame_odds(game)
+        except Exception as e:
+            print(f"Error checking pregame refresh for {ticker}: {e}")
+
+
+def refresh_pregame_odds(game: dict):
+    """Re-fetch and update pregame odds right before a game starts."""
+    ticker = game["ticker"]
+    favorite_team = game["favorite_team"]
+
+    odds = kalshi.get_team_odds(ticker, favorite_team)
+    if not odds:
+        print(f"  {ticker}: Could not refresh pregame odds")
+        _refreshed_games.add(ticker)
+        return
+
+    old_prob = game["pregame_odds"]
+    new_prob = odds["probability"]
+    new_american = odds["american"]
+
+    # Update stored pregame odds
+    state.update_pregame_odds(ticker, new_prob)
+    _refreshed_games.add(ticker)
+
+    old_american = kalshi.probability_to_american(old_prob)
+    underdog = game["away_team"] if favorite_team == game["home_team"] else game["home_team"]
+
+    print(f"  {ticker}: Pregame odds refreshed {favorite_team} {old_american} -> {new_american}")
+
+    # Send "game starting" notification
+    notifier.send_game_starting(
+        favorite_team=favorite_team,
+        underdog_team=underdog,
+        odds=new_american
+    )
 
 
 def poll_live_games():
@@ -83,6 +148,9 @@ def run_polling_loop():
             print("No active games to monitor. Exiting polling loop.")
             break
 
+        # Refresh pregame odds for games about to start
+        check_pregame_refreshes()
+
         # Poll live games
         try:
             any_live = poll_live_games()
@@ -115,19 +183,13 @@ def main():
     # Send startup notification
     notifier.send_startup_message()
 
-    # Run initial scan
-    run_daily_scan()
-
-    # Print monitoring status
-    print("\n" + scanner.get_monitored_summary())
-
     # Schedule daily scan at 7 AM PST (10 AM ET / 3 PM UTC)
     schedule.every().day.at("15:00").do(run_daily_scan)
 
     # Schedule daily cleanup at 3 AM
     schedule.every().day.at("03:00").do(lambda: state.cleanup_old_games(days_old=7))
 
-    print("\nWaiting for games to start...")
+    print("Waiting for daily scan (7 AM PST) or next game...")
 
     try:
         while True:
@@ -139,6 +201,9 @@ def main():
             if not active_games:
                 time.sleep(60)  # Check every minute if no games
                 continue
+
+            # Refresh pregame odds for games about to start
+            check_pregame_refreshes()
 
             # Check if any game is live
             nba_games = scores.get_todays_games()

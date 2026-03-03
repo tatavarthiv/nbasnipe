@@ -229,6 +229,47 @@ def get_game_odds(event_ticker: str) -> Optional[dict]:
     }
 
 
+def get_team_odds(event_ticker: str, team: str) -> Optional[dict]:
+    """Get current odds for a specific team in a game.
+
+    Unlike get_game_odds() which re-determines the favorite each call,
+    this returns odds for the requested team regardless of who currently leads.
+
+    Returns:
+    {
+        "team": "DEN",
+        "probability": 0.38,
+        "american": +163,
+        "opponent": "UTA",
+        "opponent_probability": 0.62,
+        "opponent_american": -163,
+    }
+    """
+    markets = get_event_markets(event_ticker)
+    if len(markets) != 2:
+        return None
+
+    team_market = None
+    opponent_market = None
+    for m in markets:
+        if m["team"] == team:
+            team_market = m
+        else:
+            opponent_market = m
+
+    if not team_market or not opponent_market:
+        return None
+
+    return {
+        "team": team,
+        "probability": team_market["probability"],
+        "american": probability_to_american(team_market["probability"]),
+        "opponent": opponent_market["team"],
+        "opponent_probability": opponent_market["probability"],
+        "opponent_american": probability_to_american(opponent_market["probability"]),
+    }
+
+
 def get_todays_heavy_favorites(date: Optional[str] = None) -> list[dict]:
     """Get NBA games where the favorite is >= PREGAME_THRESHOLD.
 
