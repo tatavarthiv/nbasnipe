@@ -512,7 +512,7 @@ Odds are pulled from Kalshi at three distinct moments:
 ### FIXED: Hardcoded timezone
 **Problem**: `timedelta(hours=5)` assumed EST year-round, off by 1 hour during EDT (March-November).
 
-**Fix**: Uses `zoneinfo.ZoneInfo("America/New_York")` which handles EST/EDT automatically.
+**Fix**: Uses `zoneinfo.ZoneInfo("America/Los_Angeles")` for Pacific time display.
 
 ### FIXED: Notification odds formatting
 **Problem**: Positive American odds displayed without `+` prefix (e.g., `163` instead of `+163`).

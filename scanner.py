@@ -121,8 +121,8 @@ def format_start_time(iso_time: str) -> str:
     try:
         from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
-        et = dt.astimezone(ZoneInfo("America/New_York"))
-        return et.strftime("%-I:%M %p ET")
+        pt = dt.astimezone(ZoneInfo("America/Los_Angeles"))
+        return pt.strftime("%-I:%M %p PT")
     except:
         return iso_time
 

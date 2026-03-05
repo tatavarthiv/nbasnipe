@@ -186,8 +186,8 @@ def format_start_time_short(iso_time: str) -> str:
         from datetime import datetime
         from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(iso_time.replace("Z", "+00:00"))
-        et = dt.astimezone(ZoneInfo("America/New_York"))
-        return et.strftime("%-I:%M %p")
+        pt = dt.astimezone(ZoneInfo("America/Los_Angeles"))
+        return pt.strftime("%-I:%M %p")
     except:
         return "TBD"
 
