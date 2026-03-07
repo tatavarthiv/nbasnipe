@@ -9,6 +9,10 @@ import config
 _last_request_time = 0
 _min_request_interval = 1.0  # 1 second between requests
 
+# Retry config for empty results
+_max_retries = 3
+_retry_base_delay = 5.0  # seconds
+
 
 def _rate_limit():
     """Ensure we don't exceed rate limits."""
@@ -48,19 +52,8 @@ def american_to_probability(odds: int) -> float:
         return 100 / (odds + 100)
 
 
-def get_nba_events() -> list[dict]:
-    """Fetch all NBA game events from Kalshi.
-
-    Returns list of events:
-    {
-        "event_ticker": "KXNBAGAME-26FEB24BOSPHX",
-        "title": "Boston at Phoenix",
-        "sub_title": "BOS at PHX (Feb 24)",
-        "away_team": "BOS",
-        "home_team": "PHX",
-        "game_date": "2026-02-24"
-    }
-    """
+def _fetch_nba_events_once() -> list[dict]:
+    """Single attempt to fetch all NBA game events from Kalshi."""
     url = f"{config.KALSHI_API_BASE}/events"
     cursor = None
     events = []
@@ -102,6 +95,33 @@ def get_nba_events() -> list[dict]:
             break
 
     return events
+
+
+def get_nba_events() -> list[dict]:
+    """Fetch all NBA game events from Kalshi with retry on empty results.
+
+    Returns list of events:
+    {
+        "event_ticker": "KXNBAGAME-26FEB24BOSPHX",
+        "title": "Boston at Phoenix",
+        "sub_title": "BOS at PHX (Feb 24)",
+        "away_team": "BOS",
+        "home_team": "PHX",
+        "game_date": "2026-02-24"
+    }
+    """
+    for attempt in range(_max_retries):
+        events = _fetch_nba_events_once()
+        if events:
+            return events
+
+        if attempt < _max_retries - 1:
+            delay = _retry_base_delay * (2 ** attempt)
+            print(f"No games returned from Kalshi, retrying in {delay}s (attempt {attempt + 1}/{_max_retries})")
+            time.sleep(delay)
+
+    print(f"No games returned after {_max_retries} attempts")
+    return []
 
 
 def parse_event_ticker(ticker: str) -> Optional[dict]:
