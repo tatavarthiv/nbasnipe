@@ -198,21 +198,25 @@ def get_event_markets(event_ticker: str) -> list[dict]:
         # Extract team from ticker (last 3 chars after the dash)
         team = ticker.split("-")[-1] if "-" in ticker else ""
 
-        yes_bid = market.get("yes_bid", 0) or 0
-        yes_ask = market.get("yes_ask", 0) or 0
+        # API returns dollar strings (e.g. "0.8500") instead of cent ints
+        yes_bid = float(market.get("yes_bid_dollars", 0) or 0)
+        yes_ask = float(market.get("yes_ask_dollars", 0) or 0)
+        last_price = float(market.get("last_price_dollars", 0) or 0)
 
-        # Calculate probability from midpoint of bid/ask (in cents)
+        # Calculate probability from midpoint of bid/ask
         if yes_bid and yes_ask:
-            probability = (yes_bid + yes_ask) / 200  # Convert cents to 0-1
+            probability = (yes_bid + yes_ask) / 2
+        elif last_price:
+            probability = last_price
         else:
-            probability = (market.get("last_price", 50) or 50) / 100
+            probability = 0.5
 
         markets.append({
             "ticker": ticker,
             "team": team,
             "yes_bid": yes_bid,
             "yes_ask": yes_ask,
-            "last_price": market.get("last_price", 0) or 0,
+            "last_price": last_price,
             "probability": probability,
         })
 
